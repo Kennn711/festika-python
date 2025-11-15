@@ -51,6 +51,10 @@ def get_key():
         return 'QUIT'
     elif key == b'\x1b':   # ESC
         return 'ESC'
+    elif key == b' ':      # Spacebar untuk toggle selection
+        return 'SPACE'
+    elif key == b'a' or key == b'A':  # Select all
+        return 'SELECT_ALL'
     elif key == b'1':      # Sort shortcuts
         return 'SORT_NAME'
     elif key == b'2':

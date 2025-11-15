@@ -34,6 +34,24 @@ def copy_item(source_path, dest_dir):
         return False, f"Copy failed: {str(e)}"
 
 
+def copy_multiple_items(source_paths, dest_dir):
+    """Copy multiple files/folders ke directory tujuan"""
+    success_count = 0
+    failed_items = []
+    
+    for source_path in source_paths:
+        success, msg = copy_item(source_path, dest_dir)
+        if success:
+            success_count += 1
+        else:
+            failed_items.append(Path(source_path).name)
+    
+    if failed_items:
+        return True, f"Copied {success_count} items. Failed: {', '.join(failed_items)}"
+    else:
+        return True, f"Successfully copied {success_count} items"
+
+
 def move_item(source_path, dest_dir):
     """Move file atau folder ke directory tujuan"""
     try:
@@ -50,6 +68,24 @@ def move_item(source_path, dest_dir):
         return False, f"Move failed: {str(e)}"
 
 
+def move_multiple_items(source_paths, dest_dir):
+    """Move multiple files/folders ke directory tujuan"""
+    success_count = 0
+    failed_items = []
+    
+    for source_path in source_paths:
+        success, msg = move_item(source_path, dest_dir)
+        if success:
+            success_count += 1
+        else:
+            failed_items.append(Path(source_path).name)
+    
+    if failed_items:
+        return True, f"Moved {success_count} items. Failed: {', '.join(failed_items)}"
+    else:
+        return True, f"Successfully moved {success_count} items"
+
+
 def delete_item(path):
     """Delete file atau folder"""
     try:
@@ -63,6 +99,24 @@ def delete_item(path):
         return True, "Deleted successfully"
     except Exception as e:
         return False, f"Delete failed: {str(e)}"
+
+
+def delete_multiple_items(paths):
+    """Delete multiple files/folders"""
+    success_count = 0
+    failed_items = []
+    
+    for path in paths:
+        success, msg = delete_item(path)
+        if success:
+            success_count += 1
+        else:
+            failed_items.append(Path(path).name)
+    
+    if failed_items:
+        return True, f"Deleted {success_count} items. Failed: {', '.join(failed_items)}"
+    else:
+        return True, f"Successfully deleted {success_count} items"
 
 
 def rename_item(old_path, new_name):

@@ -16,7 +16,7 @@ def get_terminal_size():
     return size.columns, size.lines
 
 
-def draw_header(current_path, search_mode=False, search_query="", filter_ext="", clipboard_info="", sort_mode="name", view_mode="detailed"):
+def draw_header(current_path, search_mode=False, search_query="", filter_ext="", clipboard_info="", sort_mode="name", view_mode="detailed", selected_count=0):
     """Gambar header dengan path saat ini"""
     cols, _ = get_terminal_size()
     
@@ -37,8 +37,18 @@ def draw_header(current_path, search_mode=False, search_query="", filter_ext="",
     view_icon = {"detailed": "📋", "compact": "📄", "list": "📃"}
     
     info_text = f" {sort_icon.get(sort_mode, '📝')} Sort: {sort_mode.title()}  |  {view_icon.get(view_mode, '📋')} View: {view_mode.title()}"
+    
+    # Add selection count if any
+    if selected_count > 0:
+        info_text += f"  |  ✓ Selected: {selected_count}"
+    
     padding = cols - len(info_text) - 2
-    print("│" + info_text + " " * padding + "│")
+    if padding > 0:
+        print("│" + info_text + " " * padding + "│")
+    else:
+        # Text too long, truncate
+        info_text = info_text[:cols-5] + "..."
+        print("│" + info_text + "│")
     
     # Clipboard info
     if clipboard_info:
@@ -75,22 +85,25 @@ def draw_footer(search_mode=False, is_filter_mode=False):
         else:
             help_text = " [Type to search | Enter: Apply | ESC: Cancel] "
     else:
-        help_text = " [S:Sort W:View C:Copy X:Cut V:Paste R:Rename D:Delete N:Folder T:File /:Search F:Filter Q:Quit] "
+        help_text = " [Space:Select A:SelectAll C:Copy X:Cut V:Paste D:Delete S:Sort W:View Q:Quit] "
     
     print("└" + "─" * (cols - 2) + "┘")
     print(help_text.center(cols))
 
 
-def render_ui(current_path, items, selected_index, message="", search_mode=False, search_query="", filter_ext="", is_filter=False, clipboard_info="", sort_mode="name", view_mode="detailed"):
+def render_ui(current_path, items, selected_index, message="", search_mode=False, search_query="", filter_ext="", is_filter=False, clipboard_info="", sort_mode="name", view_mode="detailed", selected_items=None):
     """Render UI dengan data real"""
     from .sorting import format_item_display
+    
+    if selected_items is None:
+        selected_items = set()
     
     clear_screen()
     
     cols, lines = get_terminal_size()
     
     # Header
-    draw_header(current_path, search_mode, search_query, filter_ext if not search_mode else (filter_ext if is_filter else None), clipboard_info, sort_mode, view_mode)
+    draw_header(current_path, search_mode, search_query, filter_ext if not search_mode else (filter_ext if is_filter else None), clipboard_info, sort_mode, view_mode, len(selected_items))
     
     # Message (jika ada)
     if message:
@@ -117,11 +130,21 @@ def render_ui(current_path, items, selected_index, message="", search_mode=False
         for idx, item in enumerate(items[:max_display]):
             display_text = format_item_display(item, cols - 6, view_mode)
             
+            # Check if item is selected
+            is_selected = idx in selected_items
+            
             if idx == selected_index:
-                # Item yang dipilih
-                print(f" > {display_text}")
+                # Current cursor position
+                if is_selected:
+                    print(f" ✓> {display_text}")  # Selected + cursor
+                else:
+                    print(f" > {display_text}")   # Just cursor
             else:
-                print(f"   {display_text}")
+                # Not at cursor
+                if is_selected:
+                    print(f" ✓  {display_text}")  # Just selected
+                else:
+                    print(f"   {display_text}")   # Normal
         
         # Info jika ada lebih banyak items
         if len(items) > max_display:

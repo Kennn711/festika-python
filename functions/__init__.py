@@ -24,7 +24,10 @@ from .file_operations import (
     delete_item,
     rename_item,
     create_folder,
-    create_file
+    create_file,
+    copy_multiple_items,
+    move_multiple_items,
+    delete_multiple_items
 )
 from .sorting import (
     sort_items,
@@ -70,6 +73,9 @@ __all__ = [
     'rename_item',
     'create_folder',
     'create_file',
+    'copy_multiple_items',
+    'move_multiple_items',
+    'delete_multiple_items',
     
     # Sorting
     'sort_items',
