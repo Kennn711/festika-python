@@ -21,6 +21,10 @@ def get_key():
             return 'RIGHT'
         elif key == b'S':  # Delete key
             return 'DELETE'
+        elif key == b'I':  # Page Up
+            return 'PAGE_UP'
+        elif key == b'Q':  # Page Down
+            return 'PAGE_DOWN'
     elif key == b'\r':     # Enter
         return 'ENTER'
     elif key == b'\x08':   # Backspace
@@ -51,6 +55,8 @@ def get_key():
         return 'COMPRESS'
     elif key == b'e' or key == b'E':  # Extract
         return 'EXTRACT'
+    elif key == b'l' or key == b'L':  # Layout/Column menu
+        return 'LAYOUT'
     elif key == b'q' or key == b'Q':  # Quit
         return 'QUIT'
     elif key == b'\x1b':   # ESC
@@ -67,5 +73,13 @@ def get_key():
         return 'SORT_DATE'
     elif key == b'4':
         return 'SORT_TYPE'
+    elif key == b'5':      # Column shortcuts
+        return 'COL_1'
+    elif key == b'6':
+        return 'COL_2'
+    elif key == b'7':
+        return 'COL_3'
+    elif key == b'8':
+        return 'COL_4'
     
     return None

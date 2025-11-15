@@ -54,6 +54,9 @@ from .compression import (
     extract_archive,
     show_compression_menu
 )
+from .layout import (
+    show_layout_menu
+)
 
 __all__ = [
     # Keyboard
@@ -109,4 +112,7 @@ __all__ = [
     'compress_to_rar',
     'extract_archive',
     'show_compression_menu',
+    
+    # Layout
+    'show_layout_menu',
 ]
