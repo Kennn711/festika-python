@@ -45,6 +45,14 @@ from functions import (
     get_text_input,
     get_filename_input,
     confirm_dialog,
+    
+    # Compression
+    is_archive,
+    compress_to_zip,
+    compress_to_7z,
+    compress_to_rar,
+    extract_archive,
+    show_compression_menu,
 )
 
 
@@ -126,6 +134,99 @@ def main():
                     if item[0] != "..":
                         selected_items.add(idx)
                 message = f"Selected {len(selected_items)} items"
+            
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items)
+        
+        elif key == 'COMPRESS':
+            # Compress selected items or current item
+            items_to_compress = []
+            
+            if selected_items:
+                # Multi-select mode
+                for idx in selected_items:
+                    if idx < len(items) and items[idx][0] != "..":
+                        items_to_compress.append(items[idx][4])  # full_path
+            elif items and selected < len(items):
+                # Single item mode
+                name, is_dir, size, modified, full_path = items[selected]
+                if name != "..":
+                    items_to_compress.append(full_path)
+            
+            if items_to_compress:
+                # Show compression menu
+                format_type, cancelled = show_compression_menu(current_path, filter_ext)
+                
+                if not cancelled:
+                    # Get archive name
+                    if len(items_to_compress) == 1:
+                        default_name = Path(items_to_compress[0]).stem
+                    else:
+                        default_name = "archive"
+                    
+                    archive_name, cancelled = get_text_input(
+                        f"Archive name (without extension):",
+                        current_path, items, selected, filter_ext,
+                        initial_value=default_name
+                    )
+                    
+                    if not cancelled and archive_name:
+                        output_path = os.path.join(current_path, f"{archive_name}.{format_type}")
+                        
+                        # Compress
+                        if format_type == 'zip':
+                            success, msg = compress_to_zip(items_to_compress, output_path)
+                        elif format_type == '7z':
+                            success, msg = compress_to_7z(items_to_compress, output_path)
+                        elif format_type == 'rar':
+                            success, msg = compress_to_rar(items_to_compress, output_path)
+                        
+                        message = msg
+                        
+                        # Refresh directory
+                        all_items = scan_directory(current_path)
+                        all_items = sort_items(all_items, sort_mode, sort_reverse)
+                        items = filter_by_extension(all_items, filter_ext) if filter_ext else all_items
+                        selected_items.clear()
+                    else:
+                        message = "Compression cancelled"
+            else:
+                message = "No items to compress"
+            
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items)
+        
+        elif key == 'EXTRACT':
+            # Extract archive
+            if items and selected < len(items):
+                name, is_dir, size, modified, full_path = items[selected]
+                
+                if not is_dir and is_archive(name):
+                    # Get extraction folder name
+                    default_folder = Path(name).stem
+                    
+                    folder_name, cancelled = get_text_input(
+                        f"Extract to folder:",
+                        current_path, items, selected, filter_ext,
+                        initial_value=default_folder
+                    )
+                    
+                    if not cancelled and folder_name:
+                        extract_path = os.path.join(current_path, folder_name)
+                        
+                        # Create extraction folder if not exists
+                        os.makedirs(extract_path, exist_ok=True)
+                        
+                        # Extract
+                        success, msg = extract_archive(full_path, extract_path)
+                        message = msg
+                        
+                        # Refresh directory
+                        all_items = scan_directory(current_path)
+                        all_items = sort_items(all_items, sort_mode, sort_reverse)
+                        items = filter_by_extension(all_items, filter_ext) if filter_ext else all_items
+                    else:
+                        message = "Extraction cancelled"
+                else:
+                    message = "Selected item is not an archive file"
             
             render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items)
             

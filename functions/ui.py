@@ -85,7 +85,7 @@ def draw_footer(search_mode=False, is_filter_mode=False):
         else:
             help_text = " [Type to search | Enter: Apply | ESC: Cancel] "
     else:
-        help_text = " [Space:Select A:SelectAll C:Copy X:Cut V:Paste D:Delete S:Sort W:View Q:Quit] "
+        help_text = " [Space:Select Z:Compress E:Extract C:Copy X:Cut V:Paste D:Delete Q:Quit] "
     
     print("└" + "─" * (cols - 2) + "┘")
     print(help_text.center(cols))

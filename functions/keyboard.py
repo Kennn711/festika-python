@@ -47,6 +47,10 @@ def get_key():
         return 'SORT'
     elif key == b'w' or key == b'W':  # View mode
         return 'VIEW'
+    elif key == b'z' or key == b'Z':  # Compress
+        return 'COMPRESS'
+    elif key == b'e' or key == b'E':  # Extract
+        return 'EXTRACT'
     elif key == b'q' or key == b'Q':  # Quit
         return 'QUIT'
     elif key == b'\x1b':   # ESC

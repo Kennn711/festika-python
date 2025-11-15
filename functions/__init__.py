@@ -46,6 +46,14 @@ from .dialogs import (
     get_filename_input,
     confirm_dialog
 )
+from .compression import (
+    is_archive,
+    compress_to_zip,
+    compress_to_7z,
+    compress_to_rar,
+    extract_archive,
+    show_compression_menu
+)
 
 __all__ = [
     # Keyboard
@@ -93,4 +101,12 @@ __all__ = [
     'get_text_input',
     'get_filename_input',
     'confirm_dialog',
+    
+    # Compression
+    'is_archive',
+    'compress_to_zip',
+    'compress_to_7z',
+    'compress_to_rar',
+    'extract_archive',
+    'show_compression_menu',
 ]
