@@ -61,102 +61,118 @@ from functions import (
 )
 
 
-def calculate_items_per_page(num_columns):
-    """Calculate how many items can fit per page"""
+def calculate_layout_info(num_columns, total_items):
+    """Calculate layout information and adjust columns if needed"""
     cols, lines = get_terminal_size()
     
-    extra_lines = 8  # Base overhead
-    rows_per_page = lines - extra_lines
-    items_per_page = rows_per_page * num_columns if num_columns > 1 else rows_per_page
+    # Calculate available space
+    extra_lines = 8  # Base overhead (header + footer)
+    available_rows = lines - extra_lines
     
-    return max(1, items_per_page)
+    # Determine effective columns based on items
+    effective_columns = num_columns
+    
+    if num_columns > 1:
+        # Calculate minimum items needed for multi-column layout
+        min_items_for_columns = available_rows * num_columns
+        
+        # If not enough items to fill all columns, reduce column count
+        if total_items < min_items_for_columns:
+            # Try to find optimal column count
+            for cols_test in range(num_columns, 0, -1):
+                if total_items >= available_rows * cols_test or cols_test == 1:
+                    effective_columns = cols_test
+                    break
+    
+    # Calculate items per page with effective columns
+    rows_per_page = available_rows
+    items_per_page = rows_per_page * effective_columns
+    
+    return effective_columns, items_per_page, rows_per_page
 
 
-def calculate_position_in_grid(index, total_items, num_columns, items_per_page):
-    """
-    Calculate row and column position of an item in the grid
-    Returns: (page, row_in_page, col)
-    """
-    # Calculate which page
-    page = index // items_per_page
+def get_position_in_grid(selected, num_columns, rows_per_page):
+    """Get row and column position of selected item in grid"""
+    if num_columns == 1:
+        return selected, 0
     
-    # Index within current page
-    index_in_page = index % items_per_page
+    # In multi-column layout, items are arranged in column-major order
+    row = selected % rows_per_page
+    col = selected // rows_per_page
     
-    # Calculate rows per page
-    rows_per_page = items_per_page // num_columns
-    
-    # Calculate column and row
-    col = index_in_page // rows_per_page
-    row = index_in_page % rows_per_page
-    
-    return page, row, col
+    return row, col
 
 
-def move_in_grid(current_index, total_items, num_columns, items_per_page, direction):
-    """
-    Move cursor in grid layout
-    direction: 'up', 'down', 'left', 'right'
-    Returns: new_index
-    """
+def move_in_grid(selected, direction, num_columns, rows_per_page, total_items):
+    """Calculate new selection based on direction in grid layout"""
     if total_items == 0:
         return 0
     
-    # Get current position
-    page, row, col = calculate_position_in_grid(current_index, total_items, num_columns, items_per_page)
-    rows_per_page = items_per_page // num_columns
+    if num_columns == 1:
+        # Single column - simple up/down
+        if direction == 'UP':
+            return max(0, selected - 1)
+        elif direction == 'DOWN':
+            return min(total_items - 1, selected + 1)
+        return selected
     
-    if direction == 'up':
+    # Multi-column layout
+    current_row, current_col = get_position_in_grid(selected, num_columns, rows_per_page)
+    
+    if direction == 'UP':
         # Move up one row
-        if row > 0:
-            row -= 1
+        new_row = current_row - 1
+        if new_row < 0:
+            # Wrap to bottom of previous column
+            new_col = current_col - 1
+            if new_col < 0:
+                return 0  # Already at top-left
+            new_row = rows_per_page - 1
+            new_selected = new_col * rows_per_page + new_row
+            return min(total_items - 1, max(0, new_selected))
         else:
-            # Already at top row, go to previous page last row
-            if page > 0:
-                page -= 1
-                row = rows_per_page - 1
-            else:
-                # Already at first item
-                return 0
+            new_selected = current_col * rows_per_page + new_row
+            return min(total_items - 1, new_selected)
     
-    elif direction == 'down':
+    elif direction == 'DOWN':
         # Move down one row
-        row += 1
-        # Check if new position exists
-        new_index = page * items_per_page + col * rows_per_page + row
-        if new_index >= total_items:
-            # Would go beyond last item
-            if page < (total_items - 1) // items_per_page:
-                # Go to next page, first row
-                page += 1
-                row = 0
-            else:
-                # Stay at last item
-                return total_items - 1
+        new_row = current_row + 1
+        new_selected = current_col * rows_per_page + new_row
+        
+        if new_selected >= total_items:
+            # Try to wrap to top of next column
+            new_col = current_col + 1
+            if new_col >= num_columns:
+                return total_items - 1  # Already at bottom-right
+            new_selected = new_col * rows_per_page
+            return min(total_items - 1, new_selected)
+        
+        return new_selected
     
-    elif direction == 'left':
-        # Move left one column
-        if col > 0:
-            col -= 1
-        else:
-            # Already at leftmost column
-            return current_index
+    elif direction == 'LEFT':
+        # Move to previous column
+        new_col = current_col - 1
+        if new_col < 0:
+            return selected  # Already at leftmost column
+        
+        new_selected = new_col * rows_per_page + current_row
+        return min(total_items - 1, max(0, new_selected))
     
-    elif direction == 'right':
-        # Move right one column
-        if col < num_columns - 1:
-            col += 1
-        else:
-            # Already at rightmost column
-            return current_index
+    elif direction == 'RIGHT':
+        # Move to next column
+        new_col = current_col + 1
+        if new_col >= num_columns:
+            return selected  # Already at rightmost column
+        
+        new_selected = new_col * rows_per_page + current_row
+        
+        if new_selected >= total_items:
+            # Target position doesn't exist, stay in current position
+            return selected
+        
+        return new_selected
     
-    # Calculate new index
-    new_index = page * items_per_page + col * rows_per_page + row
-    
-    # Ensure within bounds
-    new_index = max(0, min(new_index, total_items - 1))
-    
-    return new_index
+    return selected
 
 
 def main():
@@ -173,7 +189,7 @@ def main():
     view_mode = "detailed"  # detailed, compact, list
     
     # Layout settings
-    num_columns = 1  # Number of columns (1-4)
+    num_columns = 1  # Number of columns (1-4) - user preference
     current_page = 0  # Current page for pagination
     
     # Multi-selection
@@ -189,7 +205,8 @@ def main():
     items = sort_items(all_items, sort_mode, sort_reverse)
     
     # Render pertama
-    render_ui(current_path, items, selected, message, filter_ext=filter_ext, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+    effective_columns, items_per_page, rows_per_page = calculate_layout_info(num_columns, len(items))
+    render_ui(current_path, items, selected, message, filter_ext=filter_ext, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
     
     while True:
         # Generate clipboard info text
@@ -205,62 +222,58 @@ def main():
         key = get_key()
         message = ""  # Reset message
         
-        # Calculate items per page
-        items_per_page = calculate_items_per_page(num_columns)
+        # Calculate effective layout
+        effective_columns, items_per_page, rows_per_page = calculate_layout_info(num_columns, len(items))
         total_pages = math.ceil(len(items) / items_per_page) if items else 1
         
         # Ensure current page is valid
         current_page = max(0, min(current_page, total_pages - 1))
         
+        # Calculate visible range for current page
+        start_idx = current_page * items_per_page
+        end_idx = min(start_idx + items_per_page, len(items))
+        
         if key == 'UP':
-            if num_columns == 1:
-                # Single column: simple up
-                selected = max(0, selected - 1)
-            else:
-                # Multi-column: use grid navigation
-                selected = move_in_grid(selected, len(items), num_columns, items_per_page, 'up')
+            new_selected = move_in_grid(selected, 'UP', effective_columns, rows_per_page, len(items))
+            selected = new_selected
             
-            # Update page based on new selection
-            current_page = selected // items_per_page
+            # Adjust page if selected item is before current page
+            if selected < start_idx:
+                current_page = max(0, current_page - 1)
             
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
             
         elif key == 'DOWN':
-            if num_columns == 1:
-                # Single column: simple down
-                selected = min(len(items) - 1, selected + 1) if items else 0
-            else:
-                # Multi-column: use grid navigation
-                selected = move_in_grid(selected, len(items), num_columns, items_per_page, 'down')
+            new_selected = move_in_grid(selected, 'DOWN', effective_columns, rows_per_page, len(items))
+            selected = new_selected
             
-            # Update page based on new selection
-            current_page = selected // items_per_page
+            # Adjust page if selected item is after current page
+            if selected >= end_idx:
+                current_page = min(total_pages - 1, current_page + 1)
             
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'LEFT':
-            if num_columns > 1:
-                # Multi-column: move left one column
-                new_selected = move_in_grid(selected, len(items), num_columns, items_per_page, 'left')
+            if effective_columns > 1:
+                new_selected = move_in_grid(selected, 'LEFT', effective_columns, rows_per_page, len(items))
+                selected = new_selected
                 
-                if new_selected != selected:
-                    selected = new_selected
-                    # Update page based on new selection
-                    current_page = selected // items_per_page
-                    
-                    render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+                # Adjust page if needed
+                if selected < start_idx:
+                    current_page = max(0, current_page - 1)
+                
+                render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'RIGHT':
-            if num_columns > 1:
-                # Multi-column: move right one column
-                new_selected = move_in_grid(selected, len(items), num_columns, items_per_page, 'right')
+            if effective_columns > 1:
+                new_selected = move_in_grid(selected, 'RIGHT', effective_columns, rows_per_page, len(items))
+                selected = new_selected
                 
-                if new_selected != selected:
-                    selected = new_selected
-                    # Update page based on new selection
-                    current_page = selected // items_per_page
-                    
-                    render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+                # Adjust page if needed
+                if selected >= end_idx:
+                    current_page = min(total_pages - 1, current_page + 1)
+                
+                render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'PAGE_UP':
             # Go to previous page
@@ -272,7 +285,7 @@ def main():
             else:
                 message = "Already at first page"
             
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'PAGE_DOWN':
             # Go to next page
@@ -284,7 +297,7 @@ def main():
             else:
                 message = "Already at last page"
             
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'SPACE':
             # Toggle selection untuk item saat ini
@@ -300,7 +313,7 @@ def main():
                 else:
                     message = "Cannot select parent directory marker"
             
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'SELECT_ALL':
             # Select/Deselect all items (excluding "..")
@@ -315,7 +328,7 @@ def main():
                         selected_items.add(idx)
                 message = f"Selected {len(selected_items)} items"
             
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'LAYOUT':
             # Show layout menu
@@ -325,9 +338,16 @@ def main():
                 num_columns = new_columns
                 current_page = 0  # Reset to first page when changing layout
                 selected = 0
-                message = f"Layout changed to {num_columns} column{'s' if num_columns > 1 else ''}"
+                
+                # Calculate effective columns with new preference
+                effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
+                
+                if effective_columns < num_columns:
+                    message = f"Layout: {effective_columns} column{'s' if effective_columns > 1 else ''} (auto-adjusted from {num_columns})"
+                else:
+                    message = f"Layout: {num_columns} column{'s' if num_columns > 1 else ''}"
             
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key in ['COL_1', 'COL_2', 'COL_3', 'COL_4']:
             # Quick column shortcuts
@@ -340,9 +360,16 @@ def main():
             num_columns = column_map[key]
             current_page = 0
             selected = 0
-            message = f"Layout: {num_columns} column{'s' if num_columns > 1 else ''}"
             
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            # Calculate effective columns
+            effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
+            
+            if effective_columns < num_columns:
+                message = f"Layout: {effective_columns} column{'s' if effective_columns > 1 else ''} (auto-adjusted)"
+            else:
+                message = f"Layout: {num_columns} column{'s' if num_columns > 1 else ''}"
+            
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'COMPRESS':
             # Compress selected items or current item
@@ -394,12 +421,15 @@ def main():
                         all_items = sort_items(all_items, sort_mode, sort_reverse)
                         items = filter_by_extension(all_items, filter_ext) if filter_ext else all_items
                         selected_items.clear()
+                        
+                        # Recalculate layout
+                        effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
                     else:
                         message = "Compression cancelled"
             else:
                 message = "No items to compress"
             
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'EXTRACT':
             # Extract archive
@@ -430,12 +460,15 @@ def main():
                         all_items = scan_directory(current_path)
                         all_items = sort_items(all_items, sort_mode, sort_reverse)
                         items = filter_by_extension(all_items, filter_ext) if filter_ext else all_items
+                        
+                        # Recalculate layout
+                        effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
                     else:
                         message = "Extraction cancelled"
                 else:
                     message = "Selected item is not an archive file"
             
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
             
         elif key == 'BACKSPACE':
             # Naik ke parent directory
@@ -449,9 +482,12 @@ def main():
                 current_page = 0
                 selected_items.clear()  # Clear selection saat pindah directory
                 message = "Moved to parent directory"
+                
+                # Recalculate layout
+                effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
             else:
                 message = "Already at root directory"
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
             
         elif key == 'ENTER':
             if items and selected < len(items):
@@ -469,6 +505,7 @@ def main():
                         current_page = 0
                         selected_items.clear()
                         message = "Moved to parent directory"
+                        effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
                 elif is_dir:
                     # Masuk ke folder
                     new_path, new_items = change_directory(full_path)
@@ -481,6 +518,7 @@ def main():
                         current_page = 0
                         selected_items.clear()
                         message = f"Opened: {name}"
+                        effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
                     else:
                         message = f"Cannot access: {name}"
                 else:
@@ -490,7 +528,7 @@ def main():
                     else:
                         message = f"Cannot open: {name}"
                 
-                render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+                render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'SORT':
             new_sort, reverse, cancelled = show_sort_menu(current_path, sort_mode, filter_ext)
@@ -506,7 +544,8 @@ def main():
                 selected = 0
                 current_page = 0
                 selected_items.clear()
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+                effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key in ['SORT_NAME', 'SORT_SIZE', 'SORT_DATE', 'SORT_TYPE']:
             sort_map = {'SORT_NAME': 'name', 'SORT_SIZE': 'size', 'SORT_DATE': 'date', 'SORT_TYPE': 'type'}
@@ -518,14 +557,15 @@ def main():
             selected = 0
             current_page = 0
             selected_items.clear()
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'VIEW':
             new_view, cancelled = show_view_menu(current_path, view_mode, filter_ext, sort_mode)
             if not cancelled:
                 view_mode = new_view
                 message = f"View mode: {view_mode.title()}"
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'COPY':
             if selected_items:
@@ -539,7 +579,7 @@ def main():
                     clipboard_items = [full_path]
                     clipboard_mode = 'copy'
                     message = f"Copied to clipboard: {name}"
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'CUT':
             if selected_items:
@@ -553,7 +593,7 @@ def main():
                     clipboard_items = [full_path]
                     clipboard_mode = 'cut'
                     message = f"Cut to clipboard: {name}"
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'PASTE':
             if clipboard_items:
@@ -578,9 +618,10 @@ def main():
                 all_items = sort_items(all_items, sort_mode, sort_reverse)
                 items = filter_by_extension(all_items, filter_ext) if filter_ext else all_items
                 selected_items.clear()
+                effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
             else:
                 message = "Clipboard is empty"
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'RENAME':
             if selected_items:
@@ -595,11 +636,12 @@ def main():
                         all_items = scan_directory(current_path)
                         all_items = sort_items(all_items, sort_mode, sort_reverse)
                         items = filter_by_extension(all_items, filter_ext) if filter_ext else all_items
+                        effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
                     elif not cancelled:
                         message = "Rename cancelled"
                 else:
                     message = "Cannot rename parent directory marker"
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'DELETE_KEY' or key == 'DELETE':
             if selected_items:
@@ -615,7 +657,7 @@ def main():
                         selected_items.clear()
                         if selected >= len(items):
                             selected = max(0, len(items) - 1)
-                            current_page = selected // items_per_page
+                        effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
             elif items and selected < len(items):
                 name, is_dir, size, modified, full_path = items[selected]
                 if name != "..":
@@ -628,8 +670,8 @@ def main():
                         items = filter_by_extension(all_items, filter_ext) if filter_ext else all_items
                         if selected >= len(items):
                             selected = max(0, len(items) - 1)
-                            current_page = selected // items_per_page
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+                        effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'NEW_FOLDER':
             folder_name, cancelled = get_text_input("New folder name:", current_path, items, selected, filter_ext)
@@ -639,9 +681,10 @@ def main():
                 all_items = scan_directory(current_path)
                 all_items = sort_items(all_items, sort_mode, sort_reverse)
                 items = filter_by_extension(all_items, filter_ext) if filter_ext else all_items
+                effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
             elif not cancelled:
                 message = "Folder creation cancelled"
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'NEW_FILE':
             filename, cancelled = get_filename_input(current_path, filter_ext)
@@ -651,9 +694,10 @@ def main():
                 all_items = scan_directory(current_path)
                 all_items = sort_items(all_items, sort_mode, sort_reverse)
                 items = filter_by_extension(all_items, filter_ext) if filter_ext else all_items
+                effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
             elif not cancelled:
                 message = "File creation cancelled"
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'SEARCH':
             search_query, cancelled = search_mode_input(current_path, all_items, filter_ext)
@@ -665,10 +709,11 @@ def main():
                 selected_items.clear()
                 message = f"Search results: {len(items)} items found for '{search_query}'"
                 filter_ext = ""
+                effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
             else:
                 items = filter_by_extension(all_items, filter_ext) if filter_ext else all_items
                 message = "Search cancelled"
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
         
         elif key == 'FILTER':
             new_filter, cancelled = filter_mode_input(current_path, all_items, filter_ext)
@@ -685,9 +730,10 @@ def main():
                     selected = 0
                     current_page = 0
                     message = "Filter cleared"
+                effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
             else:
                 message = "Filter cancelled"
-            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+            render_ui(current_path, items, selected, message, filter_ext=filter_ext, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
             
         elif key == 'ESC':
             if selected_items:
@@ -699,7 +745,8 @@ def main():
                 selected = 0
                 current_page = 0
                 message = "Filter cleared"
-            render_ui(current_path, items, selected, message, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=num_columns, page=current_page)
+                effective_columns, _, _ = calculate_layout_info(num_columns, len(items))
+            render_ui(current_path, items, selected, message, clipboard_info=clipboard_info, sort_mode=sort_mode, view_mode=view_mode, selected_items=selected_items, num_columns=effective_columns, page=current_page)
             
         elif key == 'QUIT':
             clear_screen()
