@@ -88,7 +88,7 @@ def draw_footer(search_mode=False, is_filter_mode=False):
         help_text = " [Space:Select Z:Compress E:Extract C:Copy X:Cut V:Paste D:Delete Q:Quit] "
     
     print("└" + "─" * (cols - 2) + "┘")
-    print(help_text.center(cols))
+    print(help_text.center(cols), end='')  # Tambahkan end='' untuk menghindari newline extra
 
 
 def render_ui(current_path, items, selected_index, message="", search_mode=False, search_query="", filter_ext="", is_filter=False, clipboard_info="", sort_mode="name", view_mode="detailed", selected_items=None):
@@ -106,28 +106,34 @@ def render_ui(current_path, items, selected_index, message="", search_mode=False
     draw_header(current_path, search_mode, search_query, filter_ext if not search_mode else (filter_ext if is_filter else None), clipboard_info, sort_mode, view_mode, len(selected_items))
     
     # Message (jika ada)
+    message_lines = 0
     if message:
         print(f" ⓘ {message}")
         print()
+        message_lines = 2
     
-    # Calculate max displayable items (minus header/footer)
-    extra_lines = 0
-    if message:
-        extra_lines += 2
-    if search_mode or filter_ext:
-        extra_lines += 1
+    # Calculate header lines
+    header_lines = 4  # Border + path + sort/view + separator
     if clipboard_info:
-        extra_lines += 1
-    # Sort & View info line
-    extra_lines += 1
+        header_lines += 1
+    if search_mode or filter_ext:
+        header_lines += 1
     
-    max_display = lines - 8 - extra_lines
+    # Calculate footer lines
+    footer_lines = 2  # Border + help text
+    
+    # Calculate max displayable items
+    max_display = lines - header_lines - footer_lines - message_lines
     
     # File list
     if not items:
         print("   (No items found)")
     else:
-        for idx, item in enumerate(items[:max_display]):
+        display_count = 0
+        for idx, item in enumerate(items):
+            if display_count >= max_display:
+                break
+                
             display_text = format_item_display(item, cols - 6, view_mode)
             
             # Check if item is selected
@@ -145,11 +151,13 @@ def render_ui(current_path, items, selected_index, message="", search_mode=False
                     print(f" ✓  {display_text}")  # Just selected
                 else:
                     print(f"   {display_text}")   # Normal
+            
+            display_count += 1
         
         # Info jika ada lebih banyak items
         if len(items) > max_display:
-            print(f"\n   ... and {len(items) - max_display} more items")
+            remaining = len(items) - max_display
+            print(f"\n   ... and {remaining} more items")
     
-    # Footer
-    print()
+    # Footer - hapus empty print line
     draw_footer(search_mode, is_filter)
